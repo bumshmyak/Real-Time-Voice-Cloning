@@ -131,6 +131,18 @@ def preprocess_librispeech(datasets_root: Path, out_dir: Path, skip_existing=Fal
                                  skip_existing, logger)
 
 
+def preprocess_youtube(datasets_root: Path, out_dir: Path, skip_existing=False):
+    # Initialize the preprocessing
+    dataset_name = "youtube"
+    dataset_root, logger = _init_preprocess_dataset(dataset_name, datasets_root, out_dir)
+    if not dataset_root:
+        return 
+    
+    # Preprocess all speakers
+    speaker_dirs = list(dataset_root.glob("*"))
+    _preprocess_speaker_dirs(speaker_dirs, dataset_name, datasets_root, out_dir, "wav",
+                             skip_existing, logger)
+
 def preprocess_voxceleb1(datasets_root: Path, out_dir: Path, skip_existing=False):
     # Initialize the preprocessing
     dataset_name = "VoxCeleb1"
