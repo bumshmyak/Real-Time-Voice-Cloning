@@ -13,9 +13,8 @@ import librosa
 def preprocess_librispeech(datasets_root: Path, out_dir: Path, n_processes: int, 
                            skip_existing: bool, hparams):
     # Gather the input directories
-    dataset_root = datasets_root.joinpath("LibriSpeech")
-    input_dirs = [dataset_root.joinpath("train-clean-100"), 
-                  dataset_root.joinpath("train-clean-360")]
+    input_dirs = [datasets_root.joinpath("audiobook_2")]
+
     print("\n    ".join(map(str, ["Using data from:"] + input_dirs)))
     assert all(input_dir.exists() for input_dir in input_dirs)
     
@@ -29,7 +28,7 @@ def preprocess_librispeech(datasets_root: Path, out_dir: Path, n_processes: int,
 
     # Preprocess the dataset
     speaker_dirs = list(chain.from_iterable(input_dir.glob("*") for input_dir in input_dirs))
-    func = partial(preprocess_speaker, out_dir=out_dir, skip_existing=skip_existing, 
+    func = partial(preprocess_speaker_open_sst, out_dir=out_dir, skip_existing=skip_existing, 
                    hparams=hparams)
     job = Pool(n_processes).imap(func, speaker_dirs)
     for speaker_metadata in tqdm(job, "LibriSpeech", len(speaker_dirs), unit="speakers"):
@@ -51,6 +50,19 @@ def preprocess_librispeech(datasets_root: Path, out_dir: Path, n_processes: int,
     print("Max audio timesteps length: %d" % max(int(m[3]) for m in metadata))
 
 
+def preprocess_speaker_open_sst(speaker_dir, out_dir: Path, skip_existing: bool, hparams):
+    metadata = []
+    for book_dir in speaker_dir.glob("*"):
+        for wav_filename in book_dir.glob("*.mp3"):
+            text_filename = book_dir.joinpath(wav_filename.name.replace('mp3', 'txt'))
+            with open(text_filename) as text_file:
+                lines = map(lambda line: line.strip(), text_file.readlines())
+                text = np.array(' '.join(lines).lower())
+                wav, _ = librosa.load(wav_filename, hparams.sample_rate)
+                metadata.append(process_utterance(wav, text, out_dir, wav_filename.name, 
+                                                  skip_existing, hparams))
+    return [m for m in metadata if m is not None]
+
 def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams):
     metadata = []
     for book_dir in speaker_dir.glob("*"):
@@ -62,7 +74,7 @@ def preprocess_speaker(speaker_dir, out_dir: Path, skip_existing: bool, hparams)
         except StopIteration:
             # A few alignment files will be missing
             continue
-        
+
         # Iterate over each entry in the alignments file
         for wav_fname, words, end_times in alignments:
             wav_fpath = book_dir.joinpath(wav_fname + ".flac")
